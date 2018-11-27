@@ -1,0 +1,382 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+
+namespace PasswordCracking {
+  internal class Program {
+     public static void Main(string[] args) {
+        Console.WriteLine("Input password please:");
+        var pass = Console.ReadLine();
+        var containsNums = false;
+        if (pass != null) {
+           foreach (var current in pass.ToCharArray())
+              try {
+                 int.Parse(current.ToString());
+                 containsNums = true;
+              }
+              catch (Exception e) {
+              } //ignored
+
+           Console.WriteLine($"Contains Numbers? {containsNums}");
+           new Main(pass, 1, containsNums);
+        }
+     }
+  }
+
+  internal class Main {
+     private readonly bool containsNums;
+
+     private readonly int minChars;
+     private readonly string password;
+
+     public Main(string password, int minChars, bool containsNums) {
+        this.password = password;
+        this.minChars = minChars;
+        this.containsNums = containsNums;
+        beginTesting();
+     }
+
+     public bool testString(string str) {
+        if (str.Equals("yes")) return true;
+        return false;
+     }
+
+     private void beginTesting() {
+        bool[] use = new bool[4];
+       
+        Console.WriteLine("Would you like to test all of the password crack methods?");
+        if(testString(Console.ReadLine()))
+           for (var i = 0; i < 4; i++)
+              use[i] = true;
+        else {
+           Console.WriteLine("Would you like to test the password with Sebas' method?");
+           use[0] = testString(Console.ReadLine());
+           Console.WriteLine("Would you like to test the password with Zack's method?");
+           use[1] = testString(Console.ReadLine());
+           Console.WriteLine("Would you like to test the password with Claire's method?");
+           use[2] = testString(Console.ReadLine());
+           Console.WriteLine("Would you like to test the password with Elisha's method?");
+           use[3] = testString(Console.ReadLine());
+        }
+
+        if (use[0]) {
+           var sebas = new SebasCrack(this, password.Length, minChars, containsNums);
+           sebas.testAll();
+           sebas = null;
+           Console.WriteLine();
+        }
+
+        if (use[1]) {
+           var zack = new ZackCrack(this, password.Length, minChars, containsNums);
+           zack.testAll();
+           zack = null;
+           Console.WriteLine();
+        }
+
+        if (use[2]) {
+           var claire = new CLCrack(this, password.Length, minChars, containsNums);
+           claire.testAll();
+           claire = null;
+           Console.WriteLine();
+        }
+
+        if (use[3]) {
+           var elisha = new ECrack(this, password.Length, minChars, containsNums);
+           elisha = null;
+           Console.WriteLine();
+        }
+     }
+
+     public bool checkPassword(string input) {
+        return password == input;
+     }
+  }
+
+  internal abstract class Crack {
+     private readonly Main main;
+     protected bool containsNums;
+     protected int maxChars, minChars;
+     protected string name;
+
+     public Crack(Main main, int maxChars, int minChars, bool containsNums, string name) {
+        this.main = main;
+        this.maxChars = maxChars;
+        this.minChars = minChars;
+        this.containsNums = containsNums;
+        this.name = name;
+     }
+
+     protected void log(string log) {
+        Console.WriteLine(name + ": " + log);
+     }
+
+     protected bool checkPassword(string input) {
+        return main.checkPassword(input);
+     }
+
+     public abstract bool testAll();
+  }
+
+  // end of "don't mess with this stuff" part.
+
+
+  //start of sebascrack
+  internal class SebasCrack : Crack {
+     private const string alpha = "abcdefghijklmnopqrstuvwxyz0123456789";
+     private readonly char[] characters, currentTest;
+     private int current, saver = -1;
+     private bool found, stats = true;
+
+     private long totalTests;
+
+     public SebasCrack(Main main, int maxChars, int minChars, bool containsNums) : base(main, maxChars, minChars, containsNums, "SebasCrack") {
+        characters = !this.containsNums ? new char[26] : characters = new char[36];
+        currentTest = new char[maxChars];
+        totalTests = 0;
+        log("Character List Size: " + characters.Length);
+        setChars();
+     }
+
+     public void setStats(bool input) {
+        stats = input;
+     }
+
+     private void setChars() {
+        Console.Write("SebasCrack: ");
+        for (var i = 0; i < characters.Length; i++) {
+           characters[i] = alpha.ToCharArray()[i];
+           Console.Write(" " + alpha.ToCharArray()[i]);
+        }
+
+        Console.WriteLine("");
+     }
+
+     public override bool testAll() {
+        var totalTests = 0;
+        for (var length = minChars; length <= maxChars; length++) {
+           generate(length, characters);
+           if (found) return true;
+        }
+
+        return false; // no result found
+     }
+
+     private void generate(int length, char[] chars) {
+        // indices that indicate what char to use on corresponding place.
+        var things = new int[length];
+        for (var x = 0; x < things.Length; x++)
+           things[x] = 0;
+        // while all indices in set of chars
+        while (things[0] < chars.Length) {
+           // print current solution
+           var str = "";
+           foreach (var i in things)
+              str += chars[i];
+           if (!stats) {
+              log(str);
+           }
+           else {
+              current++;
+              if (saver == -1) {
+                 saver = DateTime.Now.Second;
+              }
+              else if (DateTime.Now.Second - 5 - saver > 0) {
+                 base.log($"Current checks per second {current / 5}. Our most recent test was {str}");
+                 saver = -1;
+                 current = 0;
+              }
+              else if (DateTime.Now.Second <= 5) {
+                 saver = -1;
+                 current = 0;
+              }
+           }
+
+           totalTests++;
+           if (checkPassword(str)) {
+              // test it and all that shiz
+              log($"Password Found! {str}, took only {totalTests} tries....");
+              found = true;
+              return;
+           }
+
+           // go to next solution by incrementing last index and adjusting if it is out of chars set.
+           things[length - 1]++;
+           for (var i = length - 1; i > 0 && things[i] == chars.Length; --i) {
+              things[i] = 0;
+              things[i - 1]++;
+           }
+        }
+     }
+    
+  }
+
+  internal class CLCrack : Crack {
+     private static readonly string password = "p123";
+     private static string result;
+     private static bool isMatched;
+
+     private static int charactersToTestLength;
+     private static long computedKeys;
+
+     private static readonly char[] charactersToTest = {
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+        'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+        'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E',
+        'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
+        'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '1', '2', '3', '4', '5',
+        '6', '7', '8', '9', '0', '!', '$', '#', '@', '-'
+     };
+
+
+     public CLCrack(Main main, int maxChars, int minChars, bool containsNums) : base(main, maxChars, minChars,
+        containsNums, "CLCrack") {
+        var timeStarted = DateTime.Now;
+        Console.WriteLine("Start ClareCracking - {0}", timeStarted.ToString());
+        charactersToTestLength = charactersToTest.Length;
+        var estimatedPasswordLength = 0;
+
+        while (!isMatched) {
+           estimatedPasswordLength++;
+           startClaireCrack(estimatedPasswordLength);
+        }
+
+        Console.WriteLine("ClaireCrack:Password matched. - {0}", DateTime.Now.ToString());
+        Console.WriteLine("ClaireCrack:Time passed: {0}s", DateTime.Now.Subtract(timeStarted).TotalSeconds);
+        Console.WriteLine("ClaireCrack:Resolved password: {0}", result);
+        Console.WriteLine("ClaireCrack:Computed keys: {0}", computedKeys);
+     }
+
+     public override bool testAll() {
+        return false;
+     }
+
+     private void startClaireCrack(int keyLength) {
+        var keyChars = createCharArray(keyLength, charactersToTest[0]);
+        var indexOfLastChar = keyLength - 1;
+        createNewKey(0, keyChars, keyLength, indexOfLastChar);
+     }
+
+     private static char[] createCharArray(int length, char defaultChar) {
+        return (from c in new char[length] select defaultChar).ToArray();
+     }
+
+     private void createNewKey(int currentCharPosition, char[] keyChars, int keyLength, int indexOfLastChar) {
+        var nextCharPosition = currentCharPosition + 1;
+        for (var i = 0; i < charactersToTestLength; i++) {
+           keyChars[currentCharPosition] = charactersToTest[i];
+           if (currentCharPosition < indexOfLastChar) {
+              createNewKey(nextCharPosition, keyChars, keyLength, indexOfLastChar);
+           }
+           else {
+              computedKeys++;
+              if (base.checkPassword(new string(keyChars))) {
+                 if (!isMatched) {
+                    isMatched = true;
+                    result = new string(keyChars);
+                 }
+                 return;
+              }
+           }
+        }
+     }
+  }
+
+  internal class ECrack : Crack {
+     public ECrack(Main main, int maxChars, int minChars, bool containsNums) : base(main, maxChars, minChars, containsNums, "ECrack") {
+        var tests = 0;
+        var Chars = "qwertyuiopasdfghjklzxcvbn1234567890";
+        var found = false;
+        for (var i = 0; i <= 8; i++) {
+           foreach (var Password in GetCombinations(Chars.ToArray(), i)) {
+              tests++;
+              if (checkPassword(Password)) {
+                 base.log($"Your password is -  [ {Password} ]");
+                 base.log($"It took me {tests} tries.");
+                 found = true;
+                 break;
+              }
+           }
+           if (found) break;
+        }
+
+     }
+
+     private static IEnumerable<string> GetCombinations(char[] Chars, int MaximumLength) {
+        if (MaximumLength < 1) yield break;
+        foreach (var a in Chars) {
+           yield return a.ToString();
+           foreach (var b in GetCombinations(Chars, MaximumLength - 1)) yield return a + b;
+        }
+     }
+
+     public override bool testAll() {
+        return false;
+     }
+  }
+
+  internal class ZackCrack : Crack {
+     private readonly string charset = "abcdefghijklmnopqrstuvwxyz0123456789";
+     private bool containsNums;
+     private string given;
+     private int maxSize, minSize;
+
+     public ZackCrack(Main main, int maxChars, int minChars, bool containsNums) : base(main, maxChars, minChars,
+        containsNums, "ZackCrack") {
+        maxSize = maxChars;
+        minSize = minChars;
+        this.containsNums = containsNums;
+        //Console.WriteLine(minChars);
+        known();
+        var watch = Stopwatch.StartNew();
+        testAll();
+        watch.Stop();
+        log($"That took {watch.Elapsed.ToString()}");
+     }
+
+     private void known() {
+        log("What do you know");
+        given = Console.ReadLine();
+     }
+
+     public override bool testAll() {
+        int testLength;
+        int[] numberGuess;
+        //string guess="";
+        for (testLength = given.Length; testLength <= maxChars - given.Length; testLength++) {
+           numberGuess = new int[testLength];
+
+           for (var x = 0; x < numberGuess.Length; x++)
+              numberGuess[x] = 0;
+           // while all indices in set of chars
+           while (numberGuess[0] < charset.Length) {
+              // print current solution
+              var guess = "";
+              foreach (var i in numberGuess)
+                 guess += charset[i];
+
+              for (var i = 0; i <= guess.Length; i++) {
+                 var improvedGuess = guess;
+                 improvedGuess = improvedGuess.Insert(i, given);
+                 if (checkPassword(improvedGuess)) {
+                    log($"The password is {improvedGuess}");
+                    return true;
+                 }
+
+                 //else
+                 //base.log(improvedGuess);
+              }
+
+              //base.log(guess);
+              numberGuess[testLength - 1]++;
+              for (var i = testLength - 1; i > 0 && numberGuess[i] == charset.Length; --i) {
+                 numberGuess[i] = 0;
+                 numberGuess[i - 1]++;
+              }
+           }
+        }
+
+        return false;
+     }
+  }
+}
